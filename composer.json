@@ -1,12 +1,12 @@
 {
-    "name": "xiaoyaor/think-addons",
+    "name": "zorhand/think-addons",
     "description": "The ThinkPHP6 Addons Package",
-    "homepage": "https://github.com/xiaoyaor/think-addons",
+    "homepage": "https://github.com/zorhand/think-addons",
     "license": "Apache-2.0",
     "authors": [
         {
-            "name": "xiaoyaor",
-            "email": "747976016@qq.com"
+            "name": "zorhand",
+            "email": "zorhand@qq.com"
         }
     ],
     "require": {
