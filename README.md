@@ -2,7 +2,7 @@
 The ThinkPHP 6 Addons Package
 
 ## 安装
-> composer require xiaoyaor/think-addons
+> composer require zorhand/think-addons
 
 ## 配置
 
