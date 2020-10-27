@@ -166,10 +166,6 @@ class MultiAddons
                 $deny = $this->app->config->get('app.deny_app_list', []);
                 $name = current(explode('/', $path))?:'index';
 
-//                if (strpos($name, '.')) {
-//                    $name = strstr($name, '.', true);
-//                }
-
                 if (isset($map[$name])) {
                     return $this->parseMultiApp();//【系统模块绑定映射】
                 } elseif ($name && (false !== array_search($name, $map) || in_array($name, $deny))) {
@@ -199,63 +195,6 @@ class MultiAddons
                                 $this->app->request->addonsName=$this->addonsName;
                                 $con=$this->app->config->load($config,'app_'.$this->addonsName);
                                 return $this->parseMultiAddons($this->addonsName);//【应用模块绑定映射】
-                            }
-                        }
-                    }
-
-                    //xxxx应用域名绑定URL
-                    foreach ($data_list as $key=>$value){
-                        if ($value['type']=='app'){
-                            $config=ADDON_PATH.$value['name'].DIRECTORY_SEPARATOR.'config'.DIRECTORY_SEPARATOR.'app.php';
-                            $this->addonsName=$value['name'];
-                            $this->app->request->addonsName=$this->addonsName;
-                            $con=$this->app->config->load($config,'app_'.$value['name']);
-                            $bind = $con['domain_bind'];
-
-                            if (!empty($bind)) {
-                                // 获取当前子域名
-                                $subDomain = $this->app->request->subDomain();
-                                $domain    = $this->app->request->host(true);
-
-                                if (isset($bind[$domain])||isset($bind[$subDomain])||isset($bind['*'])) {
-                                    return $this->parseMultiAddons($this->addonsName);//【应用模块绑定子域名】
-                                }
-                            }
-                        }
-                    }
-
-                    //xxxx应用映射URL
-                    $path = $this->app->request->pathinfo();
-                    $list=explode('/', $path);
-                    $name = current($list);
-                    if (strpos($name, '.')) {
-                        $name = strstr($name, '.', true);
-                    }
-                    $module = key_exists(0,$list)?$list[0]:'index';
-                    $module = remove_ext($module);
-
-                    foreach ($data_list as $key=>$value){
-                        if ($value['type']=='app'  ){
-                            $config=ADDON_PATH.$value['name'].DIRECTORY_SEPARATOR.'config'.DIRECTORY_SEPARATOR.'app.php';
-                            $this->addonsName=$value['name'];
-                            $this->app->request->addonsName=$this->addonsName;
-                            $con=$this->app->config->load($config,'app_'.$value['name']);
-                            if (!$this->app->http->isBind()) {
-                                $path = $this->app->request->pathinfo();
-                                $map  = $con['app_map'];
-                                $deny = $this->app->config->get('app.deny_app_list', []);
-                                $name = current(explode('/', $path));
-                                if (strpos($name, '.')) {
-                                    $name = strstr($name, '.', true);
-                                }
-
-                                if (isset($map[$name])) {
-                                    return $this->parseMultiAddons($this->addonsName);//【应用模块绑定映射】
-                                //} elseif ($name && (false !== array_search($name, $map) || in_array($name, $deny))) {
-                                //    throw new HttpException(404, 'app not exists:' . $name);
-                                } elseif ($name && isset($map['*'])) {
-                                    return $this->parseMultiAddons($this->addonsName);//【应用模块绑定映射】
-                                }
                             }
                         }
                     }
@@ -502,7 +441,14 @@ class MultiAddons
                     if (!is_dir($appPath)) {
                         $express = $this->app->config->get('app.app_express', false);
                         if ($express) {
-                            $this->setApp($defaultApp);
+                            //开启插件快速访问
+                            if (config('site.default_app')){
+                                $default_app=explode('/',config('site.default_app'));
+                                $this->setAddons($default_app[0],$default_app[1]);
+                            }else{
+                                //tp6快速访问
+                                $this->setApp($defaultApp);
+                            }
                             return true;
                         } else {
                             return false;
@@ -536,8 +482,6 @@ class MultiAddons
         $domain_list=Cache::get('domain_list',[]);
         //规则绑定列表
         $rule_list=Cache::get('rule_list',[]);
-        //模块列表信息
-        $modules_list=Cache::get('module_list_data',[]);
         $scriptName = $this->getScriptName();
         $defaultApp = $this->app->config->get('app.default_app') ?: 'index';
 
@@ -548,27 +492,6 @@ class MultiAddons
         // 获取当前子域名
         $subDomain = $this->app->request->subDomain();
         $domain    = $this->app->request->host(true);
-
-        //xxxxsite.php里网站首页自定义绑定
-        $homepage = $this->app->config->get('site.homepage') ?: '';
-        if ($homepage&&!$path) {
-            $list = explode('/', $homepage);
-            $this->addonsName=$list[1];
-            $config=ADDON_PATH.$this->addonsName.DIRECTORY_SEPARATOR.'config'.DIRECTORY_SEPARATOR.'app.php';
-            $this->app->request->addonsName=$this->addonsName;
-            $con=$this->app->config->load($config,'app_'.$this->addonsName);
-
-
-            if ($homepage&&!$path){
-                $appName = $list[0] ?: $defaultApp;
-                if ($name) {
-                    $this->app->request->setRoot('/' . $name);
-                    $this->app->request->setPathinfo(strpos($path, '/') ? ltrim(strstr($path, '/'), '/') : '');
-                }
-            }
-            $this->setAddons($appName ?: $defaultApp,$addonsName);
-            return true;
-        }
 
         //xxxx解析config.php里域名绑定
         foreach ($domain_list as $k=>$val){
@@ -584,8 +507,9 @@ class MultiAddons
                     if ($key==$subDomain){
                         $appName = $list[0] ?: $defaultApp;
                         if ($name) {
-                            $this->app->request->setRoot('/' . $name);
-                            $this->app->request->setPathinfo(strpos($path, '/') ? ltrim(strstr($path, '/'), '/') : '');
+                            $this->app->request->setRoot('');
+                            //$this->app->request->setRoot('/' . $name);
+                            //$this->app->request->setPathinfo(strpos($path, '/') ? ltrim(strstr($path, '/'), '/') : '');
                         }
                     }
                     $this->setAddons($appName ?: $defaultApp,$addonsName);
@@ -618,200 +542,25 @@ class MultiAddons
             }
         }
 
-        //xxxx遍历插件列表
-        foreach ($data_list as $key=>$value){
-            if ($value['type']=='app'){
-                $config=ADDON_PATH.$value['name'].DIRECTORY_SEPARATOR.'config'.DIRECTORY_SEPARATOR.'app.php';
-                $this->addonsName=$value['name'];
-                //$route->rule($value['web']."/:module/[:controller]/[:action]", $execute)->append(['appinfo'=>$value])
-                //   ->middleware(Frontend::class);
-                $con=$this->app->config->load($config,'app_'.$value['name']);
-                $defaultApp = $con['default_app'] ?: 'index';
-                // 自动多应用识别
-                $this->app->http->setBind(false);
-                $appName       = null;
-                $this->appName = '';
+        //xxxxsite.php里网站首页自定义绑定
+        $homepage = $this->app->config->get('site.homepage') ?: '';
+        if ($homepage&&!$path) {
+            $list = explode('/', $homepage);
+            $this->addonsName=$list[1];
+            $config=ADDON_PATH.$this->addonsName.DIRECTORY_SEPARATOR.'config'.DIRECTORY_SEPARATOR.'app.php';
+            $this->app->request->addonsName=$this->addonsName;
+            $con=$this->app->config->load($config,'app_'.$this->addonsName);
 
-                $bind = $con['domain_bind'];
 
-                $path = $this->app->request->pathinfo();
-                $list=explode('/', $path);
-                $name = current($list);
-                $module = key_exists(0,$list)?$list[0]:'index';
-                $module = remove_ext($module);
-
-                if (!empty($bind)) {
-                    // 获取当前子域名
-                    $subDomain = $this->app->request->subDomain();
-                    $domain    = $this->app->request->host(true);
-
-                    if (isset($bind[$domain])) {
-                        $appName = $bind[$domain];
-                        $this->app->http->setBind();
-                    } elseif (isset($bind[$subDomain])) {
-                        $appName = $bind[$subDomain];
-                        $this->app->http->setBind();
-                    } elseif (isset($bind['*'])) {
-                        $appName = $bind['*'];
-                        $this->app->http->setBind();
-                    }
+            if ($homepage&&!$path){
+                $appName = $list[0] ?: $defaultApp;
+                if ($name) {
+                    $this->app->request->setRoot('/' . $name);
+                    $this->app->request->setPathinfo(strpos($path, '/') ? ltrim(strstr($path, '/'), '/') : '');
                 }
-
-                if ($this->app->http->isBind()) {
-                    //模块遍历
-                    foreach ($modules_list as $key2=>$value2){
-                        if ($value2['app']==$addonsName && $value2['module']==$module){
-                            $path = $this->app->request->pathinfo();
-                            $map  = $con['app_map'];
-                            //$deny = $this->app->config->get('app.deny_app_list', []);
-                            $name = current(explode('/', $path));
-
-                            if (strpos($name, '.')) {
-                                $name = strstr($name, '.', true);
-                            }
-
-                            if (isset($map[$name])) {
-                                if ($map[$name] instanceof Closure) {
-                                    $result  = call_user_func_array($map[$name], [$this->app]);
-                                    $appName = $result ?: $name;
-                                } else {
-                                    $appName = $map[$name];
-                                }
-                            } elseif ($name && (false !== array_search($name, $map) || in_array($name, $deny))) {
-                                throw new HttpException(404, 'app not exists:' . $name);
-                            } elseif ($name && isset($map['*'])) {
-                                $appName = $map['*'];
-                            } else {
-                                $appName = $name ?: $defaultApp;
-                                $appPath = $this->path ?: $this->app->getBasePath() . $appName . DIRECTORY_SEPARATOR;
-
-                                if (!is_dir($appPath)) {
-                                    $express = $this->app->config->get('app.app_express', false);
-                                    if ($express) {
-                                        $this->setApp($defaultApp);
-                                        return true;
-                                    } else {
-                                        return false;
-                                    }
-                                }
-                            }
-
-                            if ($name) {
-                                $this->app->request->setRoot('/' . $name);
-                                $this->app->request->setPathinfo(strpos($path, '/') ? ltrim(strstr($path, '/'), '/') : '');
-                                $path=$this->app->request->pathinfo();
-                                $this->app->request->setPathinfo(strpos($path, '/') ? ltrim(strstr($path, '/'), '/') : '');
-                                //$path=$this->app->request->pathinfo();
-                            }
-                            $this->setModules($appName ?: $defaultApp,$addonsName,$module);
-                            return true;
-                        }
-                    }
-                }else{
-
-                    //遍历应用下的模块并匹配URL
-                    $path = $this->app->request->pathinfo();
-                    $map  = $this->app->config->get('app.app_map', []);
-                    $deny = $this->app->config->get('app.deny_app_list', []);
-                    $list=explode('/', $path);
-                    $name = current($list);
-                    $module = key_exists(1,$list)?$list[1]:'index';
-                    $module = remove_ext($module);
-
-                    foreach ($modules_list as $key2=>$value2){
-                        if ($value2['app']==$addonsName && $value2['module']==$module){
-                            $path = $this->app->request->pathinfo();
-                            $map  = $con['app_map'];
-                            //$deny = $this->app->config->get('app.deny_app_list', []);
-                            $name = current(explode('/', $path));
-
-                            if (strpos($name, '.')) {
-                                $name = strstr($name, '.', true);
-                            }
-
-                            if (isset($map[$name])) {
-                                if ($map[$name] instanceof Closure) {
-                                    $result  = call_user_func_array($map[$name], [$this->app]);
-                                    $appName = $result ?: $name;
-                                } else {
-                                    $appName = $map[$name];
-                                }
-                            } elseif ($name && (false !== array_search($name, $map) || in_array($name, $deny))) {
-                                throw new HttpException(404, 'app not exists:' . $name);
-                            } elseif ($name && isset($map['*'])) {
-                                $appName = $map['*'];
-                            } else {
-                                $appName = $name ?: $defaultApp;
-                                $appPath = $this->path ?: $this->app->getBasePath() . $appName . DIRECTORY_SEPARATOR;
-
-                                if (!is_dir($appPath)) {
-                                    $express = $this->app->config->get('app.app_express', false);
-                                    if ($express) {
-                                        $this->setApp($defaultApp);
-                                        return true;
-                                    } else {
-                                        return false;
-                                    }
-                                }
-                            }
-
-                            if ($name) {
-                                $this->app->request->setRoot('/' . $name);
-                                $this->app->request->setPathinfo(strpos($path, '/') ? ltrim(strstr($path, '/'), '/') : '');
-                                $path=$this->app->request->pathinfo();
-                                $this->app->request->setPathinfo(strpos($path, '/') ? ltrim(strstr($path, '/'), '/') : '');
-                                //$path=$this->app->request->pathinfo();
-                            }
-                            $this->setModules($appName ?: $defaultApp,$addonsName,$module);
-                            return true;
-                        }
-                    }
-
-
-                    //应用常规URL
-                    $path = $this->app->request->pathinfo();
-                    $map  = $con['app_map'];
-                    //$deny = $this->app->config->get('app.deny_app_list', []);
-                    $name = current(explode('/', $path));
-
-                    if (strpos($name, '.')) {
-                        $name = strstr($name, '.', true);
-                    }
-
-                    if (isset($map[$name])) {
-                        if ($map[$name] instanceof Closure) {
-                            $result  = call_user_func_array($map[$name], [$this->app]);
-                            $appName = $result ?: $name;
-                        } else {
-                            $appName = $map[$name];
-                        }
-                    } elseif ($name && (false !== array_search($name, $map) || in_array($name, $deny))) {
-                        throw new HttpException(404, 'app not exists:' . $name);
-                    } elseif ($name && isset($map['*'])) {
-                        $appName = $map['*'];
-                    } else {
-                        $appName = $name ?: $defaultApp;
-                        $appPath = $this->path ?: $this->app->getBasePath() . $appName . DIRECTORY_SEPARATOR;
-
-                        if (!is_dir($appPath)) {
-                            $express = $this->app->config->get('app.app_express', false);
-                            if ($express) {
-                                $this->setApp($defaultApp);
-                                return true;
-                            } else {
-                                return false;
-                            }
-                        }
-                    }
-
-                    if ($name) {
-                        $this->app->request->setRoot('/' . $name);
-                        $this->app->request->setPathinfo(strpos($path, '/') ? ltrim(strstr($path, '/'), '/') : '');
-                    }
-                }
-                $this->setAddons($appName ?: $defaultApp,$addonsName);
-                return true;
             }
+            $this->setAddons($appName ?: $defaultApp,$addonsName);
+            return true;
         }
 
         // 自动多应用识别
